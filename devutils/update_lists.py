@@ -87,8 +87,8 @@ DOMAIN_EXCLUDE_PREFIXES = ['components/test/', 'net/http/transport_security_stat
 # pathlib.Path.match() patterns to include in domain substitution
 DOMAIN_INCLUDE_PATTERNS = [
     '*.h', '*.hh', '*.hpp', '*.hxx', '*.cc', '*.cpp', '*.cxx', '*.c', '*.h', '*.json', '*.js',
-    '*.html', '*.htm', '*.css', '*.py*', '*.grd', '*.sql', '*.idl', '*.mk', '*.gyp*', 'makefile',
-    '*.txt', '*.xml', '*.mm', '*.jinja*'
+    '*.html', '*.htm', '*.css', '*.py*', '*.grd', '*.grdp', '*.sql', '*.idl', '*.mk', '*.gyp*',
+    'makefile', '*.txt', '*.xml', '*.mm', '*.jinja*', '*.java', '*.xtb'
 ]
 
 # Binary-detection constant
