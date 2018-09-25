@@ -1,0 +1,187 @@
+From 201f47850c945da8659abc2afabaa35252df8b03 Mon Sep 17 00:00:00 2001
+From: Daniel Bratell <bratell@opera.com>
+Date: Mon, 23 Jul 2018 20:23:46 +0000
+Subject: [PATCH] Delete temporary local AHardwareBuffer definition
+
+While waiting for a newer ndk, some constants and types
+were locally declared. Since January there is an NDK that contains
+those types so the local declarations are not needed anymore
+
+In some jumbo builds the local and ndk declaration clashed so it
+is time to drop the local declarations, but keeping some types
+still needed by the dynamic lookup of some (to be public) internal
+functions.
+
+Bug: 771171
+Change-Id: Ie29ad63108b6c7aef857752daf6741902fdd749e
+Reviewed-on: https://chromium-review.googlesource.com/1141735
+Reviewed-by: agrieve <agrieve@chromium.org>
+Reviewed-by: Richard Coles <torne@chromium.org>
+Reviewed-by: Klaus Weidner <klausw@chromium.org>
+Commit-Queue: Daniel Bratell <bratell@opera.com>
+Cr-Commit-Position: refs/heads/master@{#577237}
+---
+
+diff --git a/base/BUILD.gn b/base/BUILD.gn
+index 7fb9386..4245596 100644
+--- a/base/BUILD.gn
++++ b/base/BUILD.gn
+@@ -162,7 +162,6 @@
+     "allocator/allocator_shim.h",
+     "allocator/malloc_zone_functions_mac.cc",
+     "allocator/malloc_zone_functions_mac.h",
+-    "android/android_hardware_buffer_abi.h",
+     "android/android_hardware_buffer_compat.cc",
+     "android/android_hardware_buffer_compat.h",
+     "android/android_image_reader_abi.h",
+diff --git a/base/android/android_hardware_buffer_abi.h b/base/android/android_hardware_buffer_abi.h
+deleted file mode 100644
+index 7012532..0000000
+--- a/base/android/android_hardware_buffer_abi.h
++++ /dev/null
+@@ -1,90 +0,0 @@
+-// Copyright 2017 The Chromium Authors. All rights reserved.
+-// Use of this source code is governed by a BSD-style license that can be
+-// found in the LICENSE file.
+-
+-#ifndef BASE_ANDROID_ANDROID_HARDWARE_BUFFER_ABI_H_
+-#define BASE_ANDROID_ANDROID_HARDWARE_BUFFER_ABI_H_
+-
+-// Minimal binary interface definitions for AHardwareBuffer based on
+-// include/android/hardware_buffer.h from the Android NDK for platform level
+-// 26+. This is only intended for use from the AndroidHardwareBufferCompat
+-// wrapper for building without NDK platform level support, it is not a
+-// general-use header and is not complete.
+-//
+-// TODO(crbug.com/771171): Delete this file when third_party/android_ndk/
+-// is updated to a version that contains the android/hardware_buffer.h file.
+-//
+-// Please refer to the API documentation for details:
+-// https://developer.android.com/ndk/reference/hardware__buffer_8h.html
+-
+-#include <stdint.h>
+-
+-// Use "C" linkage to match the original header file. This isn't strictly
+-// required since the file is not declaring global functions, but the types
+-// should remain in the global namespace for compatibility, and it's a reminder
+-// that forward declarations elsewhere should use "extern "C" to avoid
+-// namespace issues.
+-extern "C" {
+-
+-typedef struct AHardwareBuffer AHardwareBuffer;
+-typedef struct ARect ARect;
+-
+-enum {
+-  AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM = 1,
+-  AHARDWAREBUFFER_FORMAT_R8G8B8X8_UNORM = 2,
+-  AHARDWAREBUFFER_FORMAT_R8G8B8_UNORM = 3,
+-  AHARDWAREBUFFER_FORMAT_R5G6B5_UNORM = 4,
+-  AHARDWAREBUFFER_FORMAT_R16G16B16A16_FLOAT = 0x16,
+-  AHARDWAREBUFFER_FORMAT_R10G10B10A2_UNORM = 0x2b,
+-  AHARDWAREBUFFER_FORMAT_BLOB = 0x21,
+-};
+-
+-enum {
+-  AHARDWAREBUFFER_USAGE_CPU_READ_NEVER = 0UL,
+-  AHARDWAREBUFFER_USAGE_CPU_READ_RARELY = 2UL,
+-  AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN = 3UL,
+-  AHARDWAREBUFFER_USAGE_CPU_READ_MASK = 0xFUL,
+-  AHARDWAREBUFFER_USAGE_CPU_WRITE_NEVER = 0UL << 4,
+-  AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY = 2UL << 4,
+-  AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN = 3UL << 4,
+-  AHARDWAREBUFFER_USAGE_CPU_WRITE_MASK = 0xFUL << 4,
+-  AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE = 1UL << 8,
+-  AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT = 1UL << 9,
+-  AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT = 1UL << 14,
+-  AHARDWAREBUFFER_USAGE_VIDEO_ENCODE = 1UL << 16,
+-  AHARDWAREBUFFER_USAGE_SENSOR_DIRECT_DATA = 1UL << 23,
+-  AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER = 1UL << 24,
+-};
+-
+-typedef struct AHardwareBuffer_Desc {
+-  uint32_t width;
+-  uint32_t height;
+-  uint32_t layers;
+-  uint32_t format;
+-  uint64_t usage;
+-  uint32_t stride;
+-  uint32_t rfu0;
+-  uint64_t rfu1;
+-} AHardwareBuffer_Desc;
+-
+-using PFAHardwareBuffer_allocate = void (*)(const AHardwareBuffer_Desc* desc,
+-                                            AHardwareBuffer** outBuffer);
+-using PFAHardwareBuffer_acquire = void (*)(AHardwareBuffer* buffer);
+-using PFAHardwareBuffer_describe = void (*)(const AHardwareBuffer* buffer,
+-                                            AHardwareBuffer_Desc* outDesc);
+-using PFAHardwareBuffer_lock = int (*)(AHardwareBuffer* buffer,
+-                                       uint64_t usage,
+-                                       int32_t fence,
+-                                       const ARect* rect,
+-                                       void** outVirtualAddress);
+-using PFAHardwareBuffer_recvHandleFromUnixSocket =
+-    int (*)(int socketFd, AHardwareBuffer** outBuffer);
+-using PFAHardwareBuffer_release = void (*)(AHardwareBuffer* buffer);
+-using PFAHardwareBuffer_sendHandleToUnixSocket =
+-    int (*)(const AHardwareBuffer* buffer, int socketFd);
+-using PFAHardwareBuffer_unlock = int (*)(AHardwareBuffer* buffer,
+-                                         int32_t* fence);
+-
+-}  // extern "C"
+-
+-#endif  // BASE_ANDROID_ANDROID_HARDWARE_BUFFER_ABI_H_
+diff --git a/base/android/android_hardware_buffer_compat.h b/base/android/android_hardware_buffer_compat.h
+index 14be3d5..dcd200f 100644
+--- a/base/android/android_hardware_buffer_compat.h
++++ b/base/android/android_hardware_buffer_compat.h
+@@ -5,10 +5,32 @@
+ #ifndef BASE_ANDROID_ANDROID_HARDWARE_BUFFER_COMPAT_H_
+ #define BASE_ANDROID_ANDROID_HARDWARE_BUFFER_COMPAT_H_
+ 
+-#include "base/android/android_hardware_buffer_abi.h"
++#include <android/hardware_buffer.h>
++#include <android/sensor.h>
++
+ #include "base/base_export.h"
+ #include "base/lazy_instance.h"
+ 
++extern "C" {
++using PFAHardwareBuffer_allocate = void (*)(const AHardwareBuffer_Desc* desc,
++                                            AHardwareBuffer** outBuffer);
++using PFAHardwareBuffer_acquire = void (*)(AHardwareBuffer* buffer);
++using PFAHardwareBuffer_describe = void (*)(const AHardwareBuffer* buffer,
++                                            AHardwareBuffer_Desc* outDesc);
++using PFAHardwareBuffer_lock = int (*)(AHardwareBuffer* buffer,
++                                       uint64_t usage,
++                                       int32_t fence,
++                                       const ARect* rect,
++                                       void** outVirtualAddress);
++using PFAHardwareBuffer_recvHandleFromUnixSocket =
++    int (*)(int socketFd, AHardwareBuffer** outBuffer);
++using PFAHardwareBuffer_release = void (*)(AHardwareBuffer* buffer);
++using PFAHardwareBuffer_sendHandleToUnixSocket =
++    int (*)(const AHardwareBuffer* buffer, int socketFd);
++using PFAHardwareBuffer_unlock = int (*)(AHardwareBuffer* buffer,
++                                         int32_t* fence);
++}
++
+ namespace base {
+ 
+ // This class provides runtime support for working with AHardwareBuffer objects
+diff --git a/build/config/android/BUILD.gn b/build/config/android/BUILD.gn
+index dbf6e4a..5f77c4a 100644
+--- a/build/config/android/BUILD.gn
++++ b/build/config/android/BUILD.gn
+@@ -81,12 +81,6 @@
+         rebase_path("$android_ndk_root/sysroot/usr/include/$abi_target",
+                     root_build_dir),
+     "-D__ANDROID_API__=$compile_api_level",
+-
+-    # Temporary workaround for third party dependencies requiring this to be
+-    # defined.
+-    # TODO(crbug.com/771171): Remove this once the third party deps have been
+-    # fixed to be compatible with newer NDK versions
+-    "-D__NDK_FPABI__=",
+   ]
+   ldflags += [ "--target=$abi_target" ]
+ 
