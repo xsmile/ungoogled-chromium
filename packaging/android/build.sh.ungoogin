@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -eux -o pipefail
+
+# https://chromium.googlesource.com/chromium/src/+/master/docs/android_build_instructions.md#Multiple-Chrome-APK-Targets
+APK_TARGET=monochrome_public_apk
+
+CHROMIUM_VERSION=$ungoog{chromium_version}
+CHROMIUM_GIT=https://chromium.googlesource.com
+GIT_ARGS='--depth 1 --no-tags'
+
+BUNDLE=android
+
+root=$(dirname $(readlink -f $0))/..
+
+source() {
+  cd "$root"
+
+  # Clone depot_tools repository and set it up
+  eval git clone $GIT_ARGS $CHROMIUM_GIT/chromium/tools/depot_tools.git
+  export PATH="$PATH:$root"/depot_tools
+  export DEPOT_TOOLS_UPDATE=0
+
+  # Clone all required repositories
+  # Using 'fetch' from depot_tools might involve less workarounds but does
+  # not allow creating a custom .glient file with repository exclusions
+  #fetch --nohooks --no-history android --target_os_only=True
+
+  # Clone Chromium repository
+  eval git clone $GIT_ARGS $CHROMIUM_GIT/chromium/src.git -b $CHROMIUM_VERSION
+  # Set up the .gclient configuration file for depot_tools
+  ln -sf ungoogled_packaging/gclient.py .gclient
+  # Download dependencies specified in the DEPS file using depot_tools
+  gclient sync --nohooks --no-history --shallow --revision=$CHROMIUM_VERSION
+
+  # Fix WebRTC repository
+  # depot_tools fails to checkout
+  webrtc_commit=$(grep 'webrtc_git.*/src\.git' src/DEPS | cut -d\' -f8)
+  pushd src/third_party/webrtc
+  eval git fetch $GIT_ARGS origin +refs/branch-heads/${CHROMIUM_VERSION%%.*}
+  git checkout $webrtc_commit
+  popd
+
+  # Clone libsync repository
+  # libsync is not declared as an Android dependency but it is a requirement
+  libsync_commit=$(grep 'libsync\.git' src/DEPS | cut -d\' -f10)
+  mkdir -p src/third_party/libsync/src
+  pushd src/third_party/libsync/src
+  git init
+  git remote add origin $CHROMIUM_GIT/aosp/platform/system/core/libsync.git
+  eval git fetch $GIT_ARGS origin $libsync_commit
+  git reset --hard FETCH_HEAD
+  popd
+
+  # Clone GN repository
+  mv src/tools/gn src/tools/gn.bak
+  git clone https://gn.googlesource.com/gn src/tools/gn
+  mv src/tools/gn.bak/bootstrap src/tools/gn
+}
+
+hooks() {
+  cd "$root"/src
+
+  # Create build/util/LASTCHANGE
+  python build/util/lastchange.py -o build/util/LASTCHANGE
+
+  # Download Automatic Feedback Directed Optimizer (AFDO) profile
+  python chrome/android/profiles/update_afdo_profile.py
+
+  # Download SDK extras like Google Play libraries
+  CHROME_HEADLESS=1 python build/android/play_services/update.py download
+
+  # Update GPU lists version string
+  python build/util/lastchange.py -m GPU_LISTS_VERSION --revision-id-only \
+    --header gpu/config/gpu_lists_version.h
+
+  # Update skia commit hash
+  python build/util/lastchange.py -m SKIA_COMMIT_HASH -s third_party/skia \
+    --header skia/ext/skia_commit_hash.h
+}
+
+prepare() {
+  cd "$root"/src
+
+  rm -rf out
+  mkdir -p out/Default
+
+  pushd "$root"/ungoogled_packaging
+  python3 -m buildkit prune -b config_bundles/$BUNDLE ../src/
+  python3 -m buildkit patches apply -b config_bundles/$BUNDLE ../src/
+  python3 -m buildkit domains apply -b config_bundles/$BUNDLE -c domainsubcache.tar.gz ../src/
+  python3 -m buildkit gnargs print -b config_bundles/$BUNDLE > ../src/out/Default/args.gn
+  popd
+}
+
+build() {
+  cd "$root"/src
+
+  # Build GN
+  ./tools/gn/build/gen.py --no-sysroot --out-path="$root"/src/out/Default
+  ninja -C out/Default gn
+  # Build Chromium
+  ./out/Default/gn gen out/Default --fail-on-unused-args
+  ninja -C out/Default $APK_TARGET
+}
+
+package() {
+  ln -sf "$root"/src/out/Default/apks "$root"/..
+  echo 'See directory "apks" for the compiled application'
+}
+
+source
+hooks
+prepare
+build
+package
