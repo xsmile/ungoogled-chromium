@@ -5,7 +5,9 @@ set -eux -o pipefail
 APK_TARGET=monochrome_public_apk
 
 CHROMIUM_VERSION=$ungoog{chromium_version}
+GN_COMMIT=77d64a3da6bc7d8b0aab83ff7459b3280e6a84f2
 CHROMIUM_GIT=https://chromium.googlesource.com
+
 GIT_ARGS='--depth 1 --no-tags'
 
 BUNDLE=android
@@ -15,22 +17,29 @@ root=$(dirname $(readlink -f $0))/..
 source() {
   cd "$root"
 
+  # Clone Chromium repository
+  eval git clone $GIT_ARGS $CHROMIUM_GIT/chromium/src.git -b $CHROMIUM_VERSION
+
   # Clone depot_tools repository and set it up
-  eval git clone $GIT_ARGS $CHROMIUM_GIT/chromium/tools/depot_tools.git
-  export PATH="$PATH:$root"/depot_tools
+  depot_tools_commit=$(grep 'depot_tools.git' src/DEPS | cut -d\' -f8)
+  mkdir -p depot_tools
+  pushd depot_tools
+  git init
+  git remote add origin $CHROMIUM_GIT/chromium/tools/depot_tools.git
+  eval git fetch $GIT_ARGS origin $depot_tools_commit
+  git reset --hard FETCH_HEAD
+  popd
+  export PATH="$root"/depot_tools:"$PATH"
   export DEPOT_TOOLS_UPDATE=0
 
   # Clone all required repositories
   # Using 'fetch' from depot_tools might involve less workarounds but does
   # not allow creating a custom .glient file with repository exclusions
   #fetch --nohooks --no-history android --target_os_only=True
-
-  # Clone Chromium repository
-  eval git clone $GIT_ARGS $CHROMIUM_GIT/chromium/src.git -b $CHROMIUM_VERSION
   # Set up the .gclient configuration file for depot_tools
   ln -sf ungoogled_packaging/gclient.py .gclient
   # Download dependencies specified in the DEPS file using depot_tools
-  gclient sync --nohooks --no-history --shallow --revision=$CHROMIUM_VERSION
+  gclient sync --nohooks --no-history --shallow --revision=$CHROMIUM_VERSION || true
 
   # Fix WebRTC repository
   # depot_tools fails to checkout
@@ -54,7 +63,10 @@ source() {
   # Clone GN repository
   mv src/tools/gn src/tools/gn.bak
   git clone https://gn.googlesource.com/gn src/tools/gn
-  mv src/tools/gn.bak/bootstrap src/tools/gn
+  pushd src/tools/gn
+  git checkout $GN_COMMIT
+  popd
+  cp -r src/tools/gn.bak/bootstrap src/tools/gn
 }
 
 hooks() {
